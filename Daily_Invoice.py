@@ -1,52 +1,91 @@
+from urllib import request
+# import datetime
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
+
+import airflow
+from airflow import DAG
+from airflow.operators.python import PythonOperator
+
 import pandas as pd
 import json
 
-json_file_path = '/home/june/airflow/output/2011-11-11.json'
+# target_date = datetime.datetime(2011, 11, 11, tzinfo=datetime.timezone.utc)
+now = datetime.now()
+target_date = now - relativedelta(years=12)
+
+dag = DAG(
+    dag_id = "Daily_Invoice_Summary",
+    start_date=target_date,
+    schedule_interval=None,
+)
+
+def _get_data(execution_date):
+    year, month, day = target_date.timetuple()[:3]
+    url = ("http://host.docker.internal:5000/"f"{year}/"f"{month}/"f"{day}")
+    output_path = "/opt/airflow/output/"f"{year}-"f"{month}-"f"{day}"".json" # <- ./airflow 디렉토리가 ?
+    request.urlretrieve(url, output_path)
+
+# def _json_to_csv(execution_date):
+#     year, month, day = target_date.timetuple()[:3]
+#     json_file_path = ("/opt/airflow/output/"f"{year}-"f"{month}-"f"{day}.json")
+#     output_path = "/opt/airflow/output/"f"{year}-"f"{month}-"f"{day}"".csv"
+#     df = pd.read_json(json_file_path)
+#     df.to_csv(output_path, index=False)
+
+def _goodstop30(execution_date):
+    year, month, day = target_date.timetuple()[:3]
+    json_file_path = "/opt/airflow/output/"f"{year}-"f"{month}-"f"{day}"".json"
+    output_path = "/opt/airflow/output/GoodsTop30_"f"{year}-"f"{month}-"f"{day}"".csv"
+    df = pd.read_json(json_file_path)
+    df = df.groupby('Country')['StockCode'].count().sort_values(ascending=False).head(30)
+    df.to_csv(output_path)
 
 
-# with open(json_file_path, 'r') as f:
-#     contents = json.load(f)
+def _usertop3(execution_date):
+    year, month, day = target_date.timetuple()[:3]
+    json_file_path = "/opt/airflow/output/"f"{year}-"f"{month}-"f"{day}"".json"
+    output_path = "/opt/airflow/output/UserTop3_"f"{year}-"f"{month}-"f"{day}"".csv"
+    df = pd.read_json(json_file_path)
+    df = df.groupby('CustomerID')['UnitPrice'].sum().sort_values(ascending=False).head(3)
+    df.to_csv(output_path)
 
-# print(len(contents))
-Daily_Invoice = pd.read_json(json_file_path)
+def _pricetop5(execution_date):
+    year, month, day = target_date.timetuple()[:3]
+    json_file_path = "/opt/airflow/output/"f"{year}-"f"{month}-"f"{day}"".json"
+    output_path = "/opt/airflow/output/PriceTop5_"f"{year}-"f"{month}-"f"{day}"".csv"
+    df = pd.read_json(json_file_path)
+    df = df.groupby('Country')['UnitPrice'].sum().sort_values(ascending=False).head(5)
+    df.to_csv(output_path)
 
-# InvoiceNo = []
-# StockCode = []
-# Description =[]
-# Quantity = []
-# InvoiceDate = []
-# UnitPrice = []
-# CustomerID = []
-# Country = []
+get_data = PythonOperator(
+    task_id="get_data",
+    python_callable=_get_data,
+    dag=dag,
+)
 
-# for i in range(len(contents)):
-#     InvoiceNo.append(contents[i]['InvoiceNo'])
-#     StockCode.append(contents[i]['StockCode'])
-#     Description.append(contents[i]['Description'])
-#     Quantity.append(contents[i]['Quantity'])
-#     InvoiceDate.append(contents[i]['InvoiceDate'])
-#     UnitPrice.append(contents[i]['UnitPrice'])
-#     CustomerID.append(contents[i]['CustomerID'])
-#     Country.append(contents[i]['Country'])
+# json_to_csv = PythonOperator(
+#     task_id = "get_file",
+#     python_callable=_json_to_csv,
+#     dag = dag,
+# )
 
-# Daily_Invoice = pd.DataFrame({'InvoiceNo' : InvoiceNo, 
-#                               'StockCode' : StockCode,
-#                               'Description' : Description,
-#                               'Quantity' : Quantity,
-#                               'InvoiceDate' : InvoiceDate,
-#                               'UnitPrice' : UnitPrice,
-#                               'CustomerID' : CustomerID,
-#                               'Country' : Country
-#                               })
+goodstop30 = PythonOperator(
+    task_id = "goodstop30",
+    python_callable=_goodstop30,
+    dag = dag,
+)
 
-# print(Daily_Invoice.head())
+usertop3 = PythonOperator(
+    task_id = "usertop3",
+    python_callable=_usertop3,
+    dag = dag,
+)
 
-print(Daily_Invoice.groupby('Country')['StockCode'].count().sort_values(ascending=False).head(30))
+pricetop5 = PythonOperator(
+    task_id = "pricetop5",
+    python_callable=_pricetop5,
+    dag = dag,
+)
 
-# print(Daily_Invoice.groupby('CustomerID')['UnitPrice'].sum().sort_values(ascending=False).head(3))
-
-# print(Daily_Invoice.groupby('Country')['UnitPrice'].sum().sort_values(ascending=False).head(5))
-
-# Daily_Invoice_Count = Daily_Invoice.groupby('Country')['StockCode'].count()
-
-# print(Daily_Invoice_Count.sort_values(ascending=False))
+get_data >> [goodstop30, usertop3, pricetop5]

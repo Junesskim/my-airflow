@@ -1,11 +1,14 @@
 import airflow
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-import datetime
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
 import pandas as pd
 import json
 
-target_date = datetime.datetime(2011, 11, 11, tzinfo=datetime.timezone.utc)
+# target_date = datetime.datetime(2011, 11, 11, tzinfo=datetime.timezone.utc)
+now = datetime.now()
+target_date = now - relativedelta(years=13)
 
 dag = DAG(
     dag_id="Daily_UserTop3",
@@ -21,7 +24,7 @@ def _usertop3(execution_date):
     df = df.groupby('CustomerID')['UnitPrice'].sum().sort_values(ascending=False).head(3)
     df.to_csv(output_path)
 
-goodstop30 = PythonOperator(
+usertop3 = PythonOperator(
     task_id = "usertop3",
     python_callable=_usertop3,
     dag = dag
