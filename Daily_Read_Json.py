@@ -1,11 +1,14 @@
 import airflow
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-import datetime
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
 import pandas as pd
 import json
 
-target_date = datetime.datetime(2011, 11, 11, tzinfo=datetime.timezone.utc)
+# target_date = datetime.datetime(2011, 11, 11, tzinfo=datetime.timezone.utc)
+now = datetime.now()
+target_date = now - relativedelta(years=13)
 
 dag = DAG(
     dag_id= "Daily_Read_json",
